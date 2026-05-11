@@ -999,6 +999,19 @@
         .stat-value.purple { color: var(--purple); }
         .stat-value.amber { color: var(--amber); }
 
+        .button-pdf {
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            border: 1px solid #a78bfa;
+            color: white;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        }
+
+        .button-pdf:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+            background: linear-gradient(135deg, #7c3aed, #5b21b6);
+        }
+
         .benchmark-controls {
             display: flex;
             gap: 12px;
@@ -1156,7 +1169,12 @@
         <!-- EXPERIMENT MODE SECTION -->
         <div id="experimentSection" class="experiment-section">
             <div style="padding: 20px; border-bottom: 1px solid rgba(0, 212, 255, 0.2); margin-bottom: 20px;">
-                <div class="experiment-title">Experiment Results</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div class="experiment-title">Experiment Results</div>
+                    <button class="button button-pdf" id="exportExperimentPdfBtn" style="width: auto; padding: 10px 20px; font-size: 11px;">
+                        <span>📄</span> EXPORT PDF REPORT
+                    </button>
+                </div>
                 <div id="experimentResults"></div>
             </div>
         </div>

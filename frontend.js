@@ -8,6 +8,17 @@ const ALGORITHMS = {
     GREEDY: 'fractional_knapsack_greedy'
 };
 
+let currentResults = {
+    type: null,
+    n: null,
+    T: null,
+    quality: null,
+    decision: null,
+    solution: null,
+    runtime_ms: null,
+    experiment: null
+};
+
 async function callSolveApi(type, n, T, quality) {
     try {
         const response = await fetch(`${API_URL}/solve`, {
@@ -83,6 +94,44 @@ async function callBenchmarkApi(type, algorithms) {
         return await response.json();
     } catch (e) {
         throw e;
+    }
+}
+async function exportPdf() {
+    if (!currentResults.decision && !currentResults.experiment) {
+        alert("No results to export. Please run a solve or experiment first.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/export-pdf`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                decision: currentResults.decision,
+                solution: currentResults.solution,
+                problem_type: currentResults.type,
+                runtime_ms: currentResults.runtime_ms,
+                n: currentResults.n,
+                time_budget_ms: currentResults.T,
+                quality_requirement: currentResults.quality
+            })
+        });
+
+        if (!response.ok) throw new Error("Failed to generate PDF");
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `algorithm_report_${currentResults.type}_${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (e) {
+        alert("Error exporting PDF: " + e.message);
     }
 }
 
@@ -806,6 +855,23 @@ async function runExperiment(type, n, T, quality) {
 
         experimentResults.innerHTML = tableHTML + chartHTML + summary;
         
+        // Store for PDF export
+        currentResults = {
+            type: type,
+            n: n,
+            T: T,
+            quality: quality,
+            decision: {
+                algorithm_name: results[0].algorithm,
+                justification: `Based on an experiment comparing ${results.length} algorithms, ${results[0].algorithm} performed best for this instance.`,
+                expected_complexity: getComplexityMetrics(results[0].algorithm).time,
+                quality_guarantee: results[0].approximation >= 0.99 ? "Exact" : "Approximation"
+            },
+            solution: results[0].latest_output,
+            runtime_ms: results[0].average_runtime_ms,
+            experiment: results
+        };
+
         // Add Close Button
         const closeBtn = document.createElement('button');
         closeBtn.className = 'button button-info';
@@ -1046,6 +1112,19 @@ document.getElementById('solveBtn').addEventListener('click', async () => {
 
     try {
         const result = await callSolveApi(type, n, T, quality);
+        
+        // Store for PDF export
+        currentResults = {
+            type: type,
+            n: n,
+            T: T,
+            quality: quality,
+            decision: result.decision,
+            solution: result.solution,
+            runtime_ms: result.runtime_ms,
+            experiment: null
+        };
+
         renderRecommendation(result.decision, type, n, T, quality);
         renderSolutionData(result, type);
         generateFlowchart(result.decision, type, n, T, quality);
@@ -1100,6 +1179,10 @@ document.getElementById('closeBenchmarkBtn').addEventListener('click', () => {
     const modeBadge = document.getElementById('modeBadge');
     modeBadge.textContent = '[STANDARD MODE]';
     modeBadge.className = 'mode-badge';
+});
+
+document.getElementById('exportExperimentPdfBtn').addEventListener('click', () => {
+    exportPdf();
 });
 
 // CSS animation keyframe for dash animation

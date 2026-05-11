@@ -7,7 +7,7 @@ import importlib.util
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Dict, Any, List, Optional, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -524,6 +524,32 @@ def run_benchmark(request: BenchmarkRequest):
             status_code=500,
             detail=f"Benchmark failed: {str(error)}"
         )
+@app.post("/export-pdf")
+def export_pdf(request: dict):
+    """
+    Generate and return a professional PDF report for an experiment or benchmark.
+    """
+    try:
+        pdf_bytes = pdf_generator.generate_report_pdf(
+            decision=request.get("decision", {}),
+            solution=request.get("solution", {}),
+            problem_type=request.get("problem_type", "unknown"),
+            runtime_ms=request.get("runtime_ms", 0),
+            n=request.get("n"),
+            time_budget_ms=request.get("time_budget_ms"),
+            quality_requirement=request.get("quality_requirement"),
+            experiment=request.get("experiment")
+        )
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=algorithm_report_{int(time.time())}.pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Local Development
 if __name__ == "__main__":

@@ -33,6 +33,8 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.barcharts import HorizontalBarChart
 
 # Color scheme - professional dark theme
 COLORS = {
@@ -433,6 +435,93 @@ class ProfessionalPDFGenerator:
         
         return elements
     
+    def create_comparison_table(self, experiment_data: List[Dict[str, Any]]) -> list:
+        """Create a ranked comparison table for multiple algorithms."""
+        elements = []
+        styles = self.build_styles()
+        
+        elements.append(Paragraph("ALGORITHM COMPARISON (RANKED)", styles['heading']))
+        
+        # Header
+        table_data = [['Rank', 'Algorithm', 'Runtime (ms)', 'Value', 'Ratio']]
+        
+        for idx, r in enumerate(experiment_data):
+            algo_info = self.get_algorithm_info(r['algorithm'])
+            table_data.append([
+                f"#{idx+1}",
+                algo_info['name'],
+                f"{r['average_runtime_ms']:.4f}",
+                str(r.get('_calculatedValue', 'N/A')),
+                f"{r.get('approximation', 1.0):.2f}"
+            ])
+            
+        table = Table(table_data, colWidths=[0.6*inch, 2.2*inch, 1.2*inch, 1.2*inch, 0.8*inch])
+        
+        # Style
+        t_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), COLORS['cyan']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), COLORS['dark_bg']),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, -1), COLORS['card_bg']),
+            ('TEXTCOLOR', (0, 1), (-1, -1), COLORS['text']),
+            ('GRID', (0, 0), (-1, -1), 0.5, COLORS['gray']),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ]
+        
+        # Highlight best
+        t_style.append(('BACKGROUND', (0, 1), (-1, 1), HexColor('#1e293b')))
+        t_style.append(('TEXTCOLOR', (0, 1), (-1, 1), COLORS['emerald']))
+        
+        table.setStyle(TableStyle(t_style))
+        elements.append(table)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        return elements
+
+    def create_runtime_chart(self, experiment_data: List[Dict[str, Any]]) -> list:
+        """Create a horizontal bar chart comparing runtimes."""
+        elements = []
+        styles = self.build_styles()
+        
+        elements.append(Paragraph("RUNTIME COMPARISON CHART", styles['heading']))
+        
+        # Chart data
+        names = [self.get_algorithm_info(r['algorithm'])['name'] for r in experiment_data]
+        names.reverse() # Horizontal chart draws from bottom up
+        runtimes = [r['average_runtime_ms'] for r in experiment_data]
+        runtimes.reverse()
+        
+        drawing = Drawing(400, 150)
+        bc = HorizontalBarChart()
+        bc.x = 80
+        bc.y = 20
+        bc.height = 110
+        bc.width = 300
+        bc.data = [runtimes]
+        bc.strokeColor = COLORS['gray']
+        bc.valueAxis.valueMin = 0
+        bc.valueAxis.labels.fontName = 'Helvetica'
+        bc.valueAxis.labels.fontSize = 8
+        bc.valueAxis.labels.fillColor = COLORS['text_muted']
+        bc.categoryAxis.labels.fontName = 'Helvetica'
+        bc.categoryAxis.labels.fontSize = 9
+        bc.categoryAxis.labels.fillColor = COLORS['text']
+        bc.categoryAxis.categoryNames = names
+        
+        # Custom colors for bars
+        bc.bars[0].fillColor = COLORS['cyan']
+        if len(runtimes) > 1:
+            bc.bars[(0, 0)].fillColor = COLORS['emerald'] # Highlight fastest
+            
+        drawing.add(bc)
+        elements.append(drawing)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        return elements
+
     def generate_pdf(self, 
                     decision: Dict[str, Any],
                     solution: Dict[str, Any],
@@ -440,7 +529,8 @@ class ProfessionalPDFGenerator:
                     runtime_ms: float,
                     n: int = None,
                     time_budget_ms: float = None,
-                    quality_requirement: str = None) -> bytes:
+                    quality_requirement: str = None,
+                    experiment: List[Dict[str, Any]] = None) -> bytes:
         """
         Generate complete PDF report.
         
@@ -512,8 +602,14 @@ class ProfessionalPDFGenerator:
             elements.append(Spacer(1, 0.2*inch))
         
         elements.extend(self.create_complexity_section(decision))
-        elements.extend(self.create_results_section(solution, problem_type, runtime_ms))
-        elements.extend(self.create_runtime_analysis(runtime_ms, solution))
+        
+        if experiment:
+            elements.extend(self.create_comparison_table(experiment))
+            elements.extend(self.create_runtime_chart(experiment))
+        else:
+            elements.extend(self.create_results_section(solution, problem_type, runtime_ms))
+            elements.extend(self.create_runtime_analysis(runtime_ms, solution))
+            
         elements.extend(self.create_recommendation_section(decision, runtime_ms))
         
         # Footer
@@ -534,7 +630,8 @@ def generate_report_pdf(decision: Dict[str, Any],
                        runtime_ms: float,
                        n: int = None,
                        time_budget_ms: float = None,
-                       quality_requirement: str = None) -> bytes:
+                       quality_requirement: str = None,
+                       experiment: List[Dict[str, Any]] = None) -> bytes:
     """
     Convenience function to generate PDF report.
     
@@ -548,5 +645,6 @@ def generate_report_pdf(decision: Dict[str, Any],
         runtime_ms=runtime_ms,
         n=n,
         time_budget_ms=time_budget_ms,
-        quality_requirement=quality_requirement
+        quality_requirement=quality_requirement,
+        experiment=experiment
     )
