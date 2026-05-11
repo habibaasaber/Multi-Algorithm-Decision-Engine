@@ -530,7 +530,7 @@ def export_pdf(request: dict):
     Generate and return a professional PDF report for an experiment or benchmark.
     """
     try:
-        pdf_bytes = pdf_generator.generate_report_pdf(
+        pdf_bytes = generate_report_pdf(
             decision=request.get("decision", {}),
             solution=request.get("solution", {}),
             problem_type=request.get("problem_type", "unknown"),
