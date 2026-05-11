@@ -213,7 +213,7 @@ class ProfessionalPDFGenerator:
         algo_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), badge_color),
             ('TEXTCOLOR', (0, 0), (-1, -1), white),
-            ('ALIGN', (0, 0), (-1, -1), TA_CENTER),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 10),
@@ -255,7 +255,7 @@ class ProfessionalPDFGenerator:
         complexity_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), COLORS['cyan']),
             ('TEXTCOLOR', (0, 0), (-1, 0), COLORS['dark_bg']),
-            ('ALIGN', (0, 0), (-1, -1), TA_CENTER),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
@@ -320,7 +320,7 @@ class ProfessionalPDFGenerator:
         results_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), COLORS['emerald']),
             ('TEXTCOLOR', (0, 0), (-1, 0), white),
-            ('ALIGN', (0, 0), (-1, -1), TA_CENTER),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
@@ -378,7 +378,7 @@ class ProfessionalPDFGenerator:
         runtime_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), color),
             ('TEXTCOLOR', (0, 0), (-1, -1), white),
-            ('ALIGN', (0, 0), (-1, -1), TA_CENTER),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 10),
@@ -614,7 +614,7 @@ class ProfessionalPDFGenerator:
             params_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), COLORS['purple']),
                 ('TEXTCOLOR', (0, 0), (-1, 0), white),
-                ('ALIGN', (0, 0), (-1, -1), TA_CENTER),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
