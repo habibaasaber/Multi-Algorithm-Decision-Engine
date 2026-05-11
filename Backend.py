@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from dataset_loader import get_problem_instance
+from pdf_generator import generate_report_pdf
 
 # Imports
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -98,6 +99,11 @@ class CompareRequest(BaseModel):
 
     algorithms: List[str]
     parameters: Dict[str, Any] = Field(default_factory=dict)
+
+
+class BenchmarkRequest(BaseModel):
+    problem_type: str
+    algorithms: List[str]
 
 # Timeout Execution
 EXECUTOR = ThreadPoolExecutor(max_workers=4)
@@ -297,6 +303,90 @@ def solve_problem(request: SolveRequest):
         )
 
 
+@app.post("/export-report")
+def export_report(request: SolveRequest):
+    """Generate a professional PDF report for the selected experiment."""
+    try:
+        if not request.parameters:
+            request.parameters = get_problem_instance(request.problem_type, request.n)
+
+        decision = choose_algorithm(
+            problem_type=request.problem_type,
+            n=request.n,
+            time_budget_ms=request.time_budget_ms,
+            quality_requirement=request.quality_requirement,
+            **request.parameters
+        )
+
+        algorithm_name = decision["algorithm_name"]
+        if algorithm_name not in ALGORITHM_FUNCTIONS:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Algorithm '{algorithm_name}' not found."
+            )
+
+        algo_kwargs = build_algorithm_kwargs(
+            algorithm_name,
+            request.parameters
+        )
+
+        start_time = time.perf_counter()
+        solution = run_with_timeout(
+            ALGORITHM_FUNCTIONS[algorithm_name],
+            timeout_seconds=max(2, request.time_budget_ms / 1000),
+            **algo_kwargs
+        )
+        first_run_ms = (time.perf_counter() - start_time) * 1000
+
+        # Stable average runtime if algorithm is very fast
+        if first_run_ms < 50:
+            total_time_ms = first_run_ms
+            num_runs = 100
+            for _ in range(num_runs - 1):
+                s = time.perf_counter()
+                run_with_timeout(
+                    ALGORITHM_FUNCTIONS[algorithm_name],
+                    timeout_seconds=1.0,
+                    **algo_kwargs
+                )
+                total_time_ms += (time.perf_counter() - s) * 1000
+            avg_runtime_ms = total_time_ms / num_runs
+        else:
+            avg_runtime_ms = first_run_ms
+
+        pdf_bytes = generate_report_pdf(
+            decision=decision,
+            solution=solution,
+            problem_type=request.problem_type,
+            runtime_ms=round(avg_runtime_ms, 4),
+            n=request.n,
+            time_budget_ms=request.time_budget_ms,
+            quality_requirement=request.quality_requirement
+        )
+
+        return {
+            "status": "success",
+            "filename": f"report_{request.problem_type}_{int(time.time())}.pdf",
+            "pdf_bytes": pdf_bytes.hex(),
+            "runtime_ms": round(avg_runtime_ms, 4)
+        }
+
+    except HTTPException:
+        raise
+
+    except (ValueError, KeyError) as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF generation failed: {str(error)}. Traceback: {traceback.format_exc()}"
+        )
+
+
 @app.post("/compare")
 def compare_algorithms(request: CompareRequest):
     """
@@ -363,6 +453,76 @@ def compare_algorithms(request: CompareRequest):
         raise HTTPException(
             status_code=500,
             detail=str(error)
+        )
+
+
+@app.post("/benchmark")
+def run_benchmark(request: BenchmarkRequest):
+    """
+    Run algorithms across multiple input sizes to analyze scaling and complexity.
+    """
+    input_sizes = [10, 20, 50, 100, 200]
+    results = []
+
+    try:
+        for size in input_sizes:
+            # Generate/Load proper dataset for this size
+            try:
+                params = get_problem_instance(request.problem_type, size)
+            except Exception as e:
+                # Fallback if dataset generation fails
+                params = {}
+
+            size_results = []
+            for algo_name in request.algorithms:
+                if algo_name not in ALGORITHM_FUNCTIONS:
+                    continue
+
+                algo_kwargs = build_algorithm_kwargs(algo_name, params)
+                
+                # Metadata for theoretical complexity
+                meta = algo_module.ALGORITHM_REGISTRY.get(algo_name, {})
+                theoretical = meta.get("time_complexity", "Unknown")
+                
+                try:
+                    start = time.perf_counter()
+                    # We run it 5 times and take the average for smoother curves
+                    runtimes = []
+                    for _ in range(3):
+                        st = time.perf_counter()
+                        run_with_timeout(
+                            ALGORITHM_FUNCTIONS[algo_name],
+                            timeout_seconds=10,
+                            **algo_kwargs
+                        )
+                        runtimes.append((time.perf_counter() - st) * 1000)
+                    
+                    avg_ms = statistics.mean(runtimes)
+                    
+                    size_results.append({
+                        "algorithm": algo_name,
+                        "input_size": size,
+                        "runtime_ms": round(avg_ms, 4),
+                        "theoretical_complexity": theoretical,
+                        "approximation_ratio": meta.get("approx_ratio", 1.0)
+                    })
+                except Exception as e:
+                    # Skip if it fails (e.g. timeout or memory)
+                    print(f"Benchmark error for {algo_name} at n={size}: {e}")
+                    continue
+            
+            results.extend(size_results)
+
+        return {
+            "status": "success",
+            "problem_type": request.problem_type,
+            "benchmark_data": results
+        }
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Benchmark failed: {str(error)}"
         )
 
 # Local Development

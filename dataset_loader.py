@@ -61,6 +61,65 @@ def load_matrix_case(n: int):
     return get_closest_case(cases, n)
 
 
+def generate_dynamic_instance(problem_type: str, n: int):
+    """Generate a problem instance of exactly size n."""
+    if problem_type in ["knapsack", "fractional_knapsack", "subset"]:
+        capacity = n * 10
+        weights = [random.randint(1, n * 2) for _ in range(n)]
+        values = [random.randint(10, 100) for _ in range(n)]
+        return {"values": values, "weights": weights, "capacity": capacity}
+    
+    elif problem_type in ["mst", "shortest_path"]:
+        num_nodes = n
+        edges = []
+        for i in range(1, num_nodes):
+            edges.append({"from": random.randint(0, i-1), "to": i, "weight": random.randint(1, 50)})
+        extra = random.randint(0, n)
+        for _ in range(extra):
+            u, v = random.randint(0, n-1), random.randint(0, n-1)
+            if u != v: edges.append({"from": u, "to": v, "weight": random.randint(1, 50)})
+        
+        adjacency = [[] for _ in range(num_nodes)]
+        for e in edges:
+            adjacency[e["from"]].append({"to": e["to"], "weight": e["weight"]})
+            adjacency[e["to"]].append({"to": e["from"], "weight": e["weight"]})
+        return {"num_nodes": num_nodes, "edges": edges, "adjacency": adjacency, "source_node": 0}
+    
+    elif problem_type == "sorting":
+        return {"array": [random.randint(1, 1000) for _ in range(n)]}
+    
+    elif problem_type == "sequence_alignment":
+        dna = ['A', 'T', 'G', 'C']
+        seq_a = "".join(random.choice(dna) for _ in range(n))
+        seq_b = "".join(random.choice(dna) for _ in range(n))
+        return {"seq_a": seq_a, "seq_b": seq_b, "gap_penalty": 1, "mismatch_penalty": 1}
+    
+    elif problem_type == "searching":
+        arr = sorted([random.randint(1, 5000) for _ in range(n)])
+        return {"array": arr, "sorted_array": arr, "target": random.choice(arr)}
+    
+    elif problem_type == "exponentiation":
+        return {"base": random.randint(2, 10), "exponent": n, "modulus": 10**9 + 7}
+    
+    elif problem_type == "scheduling":
+        intervals = []
+        for _ in range(n):
+            s = random.randint(1, 50); e = s + random.randint(1, 20); w = random.randint(10, 100)
+            intervals.append((s, e, w))
+        return {"intervals": intervals}
+    
+    elif problem_type == "matrix_mult":
+        # Ensure n is power of 2 for Strassen
+        p2 = 1
+        while p2 < n: p2 *= 2
+        m = p2
+        mat_a = [[random.randint(1, 5) for _ in range(m)] for _ in range(m)]
+        mat_b = [[random.randint(1, 5) for _ in range(m)] for _ in range(m)]
+        return {"mat_a": mat_a, "mat_b": mat_b}
+    
+    return {}
+
+
 def get_problem_instance(problem_type: str, n: int):
     # Ensure datasets exist
     import generate_datasets
@@ -87,57 +146,5 @@ def get_problem_instance(problem_type: str, n: int):
             except Exception as e:
                 print(f"Warning: Could not generate {filename}: {e}")
 
-
-    if problem_type in ["knapsack", "fractional_knapsack", "subset"]:
-        case = load_knapsack_case(n)
-        return {
-            "values": case["values"],
-            "weights": case["weights"],
-            "capacity": case["capacity"]
-        }
-    elif problem_type in ["mst", "shortest_path"]:
-        case = load_graph_case(n)
-        return {
-            "num_nodes": case["num_nodes"],
-            "edges": case["edges"],
-            "adjacency": case["adjacency"],
-            "source_node": 0
-        }
-    elif problem_type == "sorting":
-        case = load_sorting_case(n)
-        return {
-            "array": case["array"]
-        }
-    elif problem_type == "sequence_alignment":
-        case = load_sequence_case(n)
-        return {
-            "seq_a": case["seq_a"],
-            "seq_b": case["seq_b"],
-            "gap_penalty": case["gap_penalty"],
-            "mismatch_penalty": case["mismatch_penalty"]
-        }
-    elif problem_type == "searching":
-        case = load_searching_case(n)
-        return {
-            "array": case["array"],
-            "target": case["target"]
-        }
-    elif problem_type == "exponentiation":
-        case = load_exponentiation_case(n)
-        return {
-            "base": case["base"],
-            "exponent": case["exp"]
-        }
-    elif problem_type == "scheduling":
-        case = load_scheduling_case(n)
-        return {
-            "intervals": case["intervals"]
-        }
-    elif problem_type == "matrix_mult":
-        case = load_matrix_case(n)
-        return {
-            "mat_a": case["mat_a"],
-            "mat_b": case["mat_b"]
-        }
-
-    return {}
+    # For benchmarking and accurate results, we generate exactly size n
+    return generate_dynamic_instance(problem_type, n)

@@ -64,6 +64,28 @@ async function callCompareApi(type, n, algorithms) {
     }
 }
 
+async function callBenchmarkApi(type, algorithms) {
+    try {
+        const response = await fetch(`${API_URL}/benchmark`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                problem_type: type,
+                algorithms: algorithms
+            })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Benchmark API Error");
+        }
+        return await response.json();
+    } catch (e) {
+        throw e;
+    }
+}
+
 // Map backend algo classes to UI
 function getAlgoClass(backendAlgoName) {
     if (backendAlgoName.includes('brute_force')) return { name: 'Brute Force', css: 'brute-force' };
@@ -109,6 +131,7 @@ function renderRecommendation(decision, type, n, T, quality) {
     let timeComplexity = metrics.time;
     let spaceComplexity = metrics.space;
     let qualityGuarantee = metrics.quality;
+    let approxRatio = decision.approx_ratio || 1.0;
     let justification = decision.justification || "Algorithm chosen by Decision Engine.";
 
     const warningBox = backendAlgoName.includes('brute_force') ? 
@@ -132,6 +155,10 @@ function renderRecommendation(decision, type, n, T, quality) {
                 <div class="metric-chip">
                     <span class="metric-chip-label">✅ Quality</span>
                     <span class="metric-chip-value">${qualityGuarantee}</span>
+                </div>
+                <div class="metric-chip">
+                    <span class="metric-chip-label">⚖ Ratio</span>
+                    <span class="metric-chip-value">${(approxRatio * 100).toFixed(0)}%</span>
                 </div>
             </div>
             ${warningBox}
@@ -269,6 +296,95 @@ function renderSolutionData(resultObj, type) {
                 solutionHTML += '</table></div>';
             }
         }
+        else if (type === 'shortest_path') {
+            const numNodes = solution.distances.length;
+            const targetNode = numNodes - 1;
+            const distance = solution.distances[targetNode];
+            
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Distance to Node ${targetNode}</span>
+                <span class="result-row-value">${distance !== Infinity ? distance : 'Unreachable'}</span>
+            </div>`;
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+            
+            if (distance !== Infinity) {
+                solutionHTML += `<div style="margin-top: 12px;"><span class="result-row-label">Shortest Path (0 → ${targetNode})</span></div>`;
+                solutionHTML += '<div class="items-list">';
+                
+                // Reconstruct path
+                let path = [];
+                let curr = targetNode;
+                while (curr !== -1) {
+                    path.push(curr);
+                    curr = solution.predecessors[curr];
+                }
+                path.reverse();
+                
+                path.forEach((node, idx) => {
+                    solutionHTML += `<div class="item-chip">${node}</div>`;
+                    if (idx < path.length - 1) solutionHTML += '<span style="color:var(--cyan); margin:0 4px;">→</span>';
+                });
+                solutionHTML += '</div>';
+            }
+            
+            solutionHTML += `<div style="margin-top: 12px;"><span class="result-row-label">All Final Distances</span></div>`;
+            solutionHTML += '<div class="items-list">';
+            solution.distances.forEach((dist, idx) => {
+                if (dist !== Infinity) {
+                    solutionHTML += `<div class="item-chip">Node ${idx}<div class="item-chip-value">d=${dist}</div></div>`;
+                }
+            });
+            solutionHTML += '</div>';
+        }
+        else if (type === 'scheduling') {
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Total Weight</span>
+                <span class="result-row-value">${solution.max_weight}</span>
+            </div>`;
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+            if (solution.selected_intervals) {
+                solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">Selected Intervals</span></div>';
+                solutionHTML += '<div class="items-list">';
+                solution.selected_intervals.forEach(inv => {
+                    solutionHTML += `<div class="item-chip">${inv[0]}-${inv[1]}<div class="item-chip-value">w=${inv[2]}</div></div>`;
+                });
+                solutionHTML += '</div>';
+            }
+        }
+        else if (type === 'searching') {
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Target Found?</span>
+                <span class="result-row-value" style="color:${solution.index !== -1 ? 'var(--emerald)' : 'var(--red)'}">${solution.index !== -1 ? 'YES (Index ' + solution.index + ')' : 'NO'}</span>
+            </div>`;
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Steps (Comparisons)</span>
+                <span class="result-row-value">${solution.steps}</span>
+            </div>`;
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+        }
+        else if (type === 'exponentiation') {
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Result</span>
+                <span class="result-row-value">${solution.result.toString().substring(0, 15)}...</span>
+            </div>`;
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Multiplications</span>
+                <span class="result-row-value">${solution.multiplications}</span>
+            </div>`;
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+        }
         else {
             // Generic output
             solutionHTML += `<div class="result-row">
@@ -316,17 +432,32 @@ function renderSolutionData(resultObj, type) {
             solutionHTML += '</div>';
         }
 
-        if (solution.dp_table && Array.isArray(solution.dp_table) && solution.dp_table.length <= 50) {
-            solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">DP Table</span></div>';
+        if (solution.dp_table && Array.isArray(solution.dp_table)) {
+            solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">DP Table Analysis</span></div>';
             solutionHTML += '<div class="dp-table-container"><table class="dp-table">';
-            solution.dp_table.forEach((row, i) => {
-                solutionHTML += '<tr>';
-                row.slice(0, 20).forEach((col, j) => {
-                    solutionHTML += `<td>${col}</td>`;
+            
+            // Check if 2D or 1D
+            const is2D = Array.isArray(solution.dp_table[0]);
+            
+            if (is2D) {
+                // Render 2D Table (e.g. Knapsack, Sequence Alignment)
+                solution.dp_table.slice(0, 50).forEach((row, i) => {
+                    solutionHTML += '<tr>';
+                    row.slice(0, 20).forEach((col, j) => {
+                        solutionHTML += `<td>${typeof col === 'number' ? col.toFixed(0) : col}</td>`;
+                    });
+                    if (row.length > 20) solutionHTML += '<td>...</td>';
+                    solutionHTML += '</tr>';
                 });
-                if (row.length > 20) solutionHTML += '<td>...</td>';
+            } else {
+                // Render 1D Table (e.g. Scheduling)
+                solutionHTML += '<tr>';
+                solution.dp_table.slice(0, 50).forEach((val, i) => {
+                    solutionHTML += `<td>${typeof val === 'number' ? val.toFixed(0) : val}</td>`;
+                });
+                if (solution.dp_table.length > 50) solutionHTML += '<td>...</td>';
                 solutionHTML += '</tr>';
-            });
+            }
             solutionHTML += '</table></div>';
         }
 
@@ -361,14 +492,14 @@ function generateFlowchart(decisionObj, type, n, T, quality) {
 
     const nodes = [
         { x: cx, y: 40, text: 'START', type: 'start' },                                // 0
-        { x: cx, y: 120, text: 'Check Type', type: 'decision' },                       // 1
+        { x: cx, y: 120, text: `Type: ${type.toUpperCase()}`, type: 'decision' },       // 1
         { x: cx, y: 200, text: 'Subset?', type: 'decision' },                          // 2
         { x: leftX, y: 260, text: 'BRUTE FORCE', type: 'algorithm', key: 'brute_force' }, // 3
-        { x: cx, y: 280, text: 'DP Suitable?', type: 'decision' },                     // 4
+        { x: cx, y: 280, text: `n=${n} Suitable?`, type: 'decision' },                 // 4
         { x: rightX, y: 340, text: 'DYN. PROG.', type: 'algorithm', key: 'dp' },       // 5
         { x: cx, y: 360, text: 'Sort/Matrix?', type: 'decision' },                     // 6
         { x: leftX, y: 420, text: 'DIV. CONQUER', type: 'algorithm', key: 'dc' },      // 7
-        { x: cx, y: 440, text: 'Time/Qual?', type: 'decision' },                       // 8
+        { x: cx, y: 440, text: `T=${T}ms Qual=${quality}`, type: 'decision' },         // 8
         { x: rightX, y: 500, text: 'GREEDY', type: 'algorithm', key: 'greedy' },       // 9
         { x: cx, y: 600, text: 'END', type: 'end' }                                    // 10
     ];
@@ -388,16 +519,16 @@ function generateFlowchart(decisionObj, type, n, T, quality) {
     }
 
     const connections = [
-        [0, 1], [1, 2], [2, 3], [2, 4], [4, 5], [4, 6], [6, 7], [6, 8], [8, 9], [3, 10], [5, 10], [7, 10], [9, 10]
+        [0, 1], [1, 2], [2, 3, 'YES (Subset)'], [2, 4, 'NO'], [4, 5, 'YES (Small n/W)'], [4, 6, 'NO'], [6, 7, 'YES (Sort/Mat)'], [6, 8, 'NO'], [8, 9, 'YES (Fast/Approx)'], [3, 10], [5, 10], [7, 10], [9, 10]
     ];
 
-    connections.forEach(([fromIdx, toIdx]) => {
+    connections.forEach(([fromIdx, toIdx, label]) => {
         const from = nodes[fromIdx];
         const to = nodes[toIdx];
         // Ensure path connects visually correctly if active
         const isActive = pathNodes.includes(fromIdx) && pathNodes.includes(toIdx) && 
                          (pathNodes.indexOf(toIdx) === pathNodes.indexOf(fromIdx) + 1);
-        drawLine(svg, from, to, isActive);
+        drawLine(svg, from, to, isActive, label);
     });
 
     nodes.forEach((node, idx) => {
@@ -406,7 +537,7 @@ function generateFlowchart(decisionObj, type, n, T, quality) {
     });
 }
 
-function drawLine(svg, from, to, active) {
+function drawLine(svg, from, to, active, label) {
     let x1 = from.x;
     let y1 = from.y;
     let x2 = to.x;
@@ -442,6 +573,18 @@ function drawLine(svg, from, to, active) {
         path.setAttribute('stroke-dasharray', active ? '5,5' : 'none');
         if (active) path.style.animation = 'dash 20s linear infinite';
         svg.appendChild(path);
+
+        if (label) {
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x1 + (x2-x1)/2);
+            text.setAttribute('y', y1 - 10);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', active ? 'var(--cyan)' : 'var(--gray-muted)');
+            text.setAttribute('font-size', '9');
+            text.setAttribute('font-family', 'JetBrains Mono');
+            text.textContent = label;
+            svg.appendChild(text);
+        }
         return;
     }
 
@@ -470,6 +613,17 @@ function drawLine(svg, from, to, active) {
     line.setAttribute('stroke-dasharray', active ? '5,5' : 'none');
     if (active) line.style.animation = 'dash 20s linear infinite';
     svg.appendChild(line);
+
+    if (label && from.type === 'decision') {
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x1 + 10);
+        text.setAttribute('y', y1 + 25);
+        text.setAttribute('fill', active ? 'var(--cyan)' : 'var(--gray-muted)');
+        text.setAttribute('font-size', '9');
+        text.setAttribute('font-family', 'JetBrains Mono');
+        text.textContent = label;
+        svg.appendChild(text);
+    }
 }
 
 function drawNode(svg, node, active) {
@@ -597,15 +751,22 @@ async function runExperiment(type, n, T, quality) {
         tableHTML += '<th>Algorithm</th><th>Result Value</th><th>Runtime (ms)</th><th>Ratio</th><th>Quality</th><th>Rank</th></tr></thead><tbody>';
 
         results.forEach((r, idx) => {
-            const algoName = getAlgoClass(r.algorithm).name;
+            const algoInfo = getAlgoClass(r.algorithm);
             const rowClass = idx === 0 ? 'best' : (idx === results.length - 1 ? 'worst' : '');
             
             tableHTML += `<tr class="${rowClass}">
-                <td><strong>${algoName}</strong><br><span style="font-size:10px;color:#888;">${r.algorithm}</span></td>
-                <td>${r._calculatedValue.toFixed(2)}</td>
-                <td>${r.average_runtime_ms}</td>
-                <td>${r.approximation.toFixed(2)}</td>
-                <td>${r.approximation >= 0.99 ? 'Exact' : 'Approximate'}</td>
+                <td>
+                    <div style="font-weight:700; color:var(--text-white);">${algoInfo.name}</div>
+                    <div style="font-size:10px; color:var(--gray-muted); font-family: 'JetBrains Mono';">${r.algorithm.replace(/_/g, ' ')}</div>
+                </td>
+                <td style="font-family: 'JetBrains Mono'; font-weight:600;">${r._calculatedValue.toFixed(2)}</td>
+                <td style="font-family: 'JetBrains Mono';">${r.average_runtime_ms.toFixed(4)}</td>
+                <td style="font-family: 'JetBrains Mono'; color:var(--cyan);">${r.approximation.toFixed(2)}</td>
+                <td>
+                    <span style="color: ${r.approximation >= 0.99 ? 'var(--emerald)' : 'var(--amber)'}; font-size:12px; font-weight:500;">
+                        ${r.approximation >= 0.99 ? 'Exact' : 'Approximate'}
+                    </span>
+                </td>
                 <td><span class="rank-badge">#${idx + 1}</span></td>
             </tr>`;
         });
@@ -613,26 +774,35 @@ async function runExperiment(type, n, T, quality) {
         tableHTML += '</tbody></table>';
 
         // Chart
-        let chartHTML = '<div class="experiment-chart"><div style="font-size: 12px; font-weight: 600; color: var(--gray-muted); margin-bottom: 12px;">Runtime Comparison</div>';
+        let chartHTML = `
+            <div class="experiment-chart">
+                <div style="font-size: 13px; font-weight: 600; color: var(--cyan); margin-bottom: 16px; text-transform:uppercase; letter-spacing:1px;">
+                    Runtime Comparison
+                </div>
+        `;
 
         const maxRuntime = Math.max(...results.map(r => r.average_runtime_ms));
         results.forEach(r => {
             const percentage = maxRuntime > 0 ? (r.average_runtime_ms / maxRuntime) * 100 : 100;
             const algoInfo = getAlgoClass(r.algorithm);
-            chartHTML += `<div class="chart-bar-row">
-                <div class="chart-label">${algoInfo.name}</div>
-                <div class="chart-bar-container">
-                    <div class="chart-bar ${algoInfo.css}" style="--bar-width: ${percentage}%">${r.average_runtime_ms}ms</div>
-                </div>
-            </div>`;
+            chartHTML += `
+                <div class="chart-bar-row">
+                    <div class="chart-label">${algoInfo.name}</div>
+                    <div class="chart-bar-container">
+                        <div class="chart-bar ${algoInfo.css}" style="--bar-width: ${percentage}%">
+                            ${r.average_runtime_ms.toFixed(4)}ms
+                        </div>
+                    </div>
+                </div>`;
         });
         chartHTML += '</div>';
 
         const best = results[0];
         const algoName = getAlgoClass(best.algorithm).name;
-        const summary = `<div class="experiment-summary">
-            <strong>Best algorithm for this instance:</strong> ${algoName} with value ${best._calculatedValue.toFixed(2)} achieved in ${best.average_runtime_ms}ms
-        </div>`;
+        const summary = `
+            <div class="experiment-summary">
+                <span>Best algorithm for this instance: <b>${algoName}</b> with value <b>${best._calculatedValue.toFixed(2)}</b> achieved in <b>${best.average_runtime_ms.toFixed(4)}ms</b></span>
+            </div>`;
 
         experimentResults.innerHTML = tableHTML + chartHTML + summary;
         
@@ -655,6 +825,172 @@ async function runExperiment(type, n, T, quality) {
 
     } catch (e) {
         experimentResults.innerHTML = `<div class="warning-box">Error running experiment: ${e.message}</div>`;
+    }
+}
+
+// ========== BENCHMARK MODE ==========
+let benchmarkCharts = {};
+
+function initBenchmarkCharts() {
+    const chartConfigs = [
+        { id: 'runtimeChart', type: 'line' },
+        { id: 'growthChart', type: 'line' },
+        { id: 'complexityChart', type: 'line' },
+        { id: 'comparisonChart', type: 'bar' }
+    ];
+
+    chartConfigs.forEach(config => {
+        const ctx = document.getElementById(config.id).getContext('2d');
+        if (benchmarkCharts[config.id]) benchmarkCharts[config.id].destroy();
+        
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#9ca3af', font: { family: 'JetBrains Mono' } } }
+            },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } },
+                y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }
+            }
+        };
+
+        benchmarkCharts[config.id] = new Chart(ctx, {
+            type: config.type,
+            data: { labels: [], datasets: [] },
+            options: commonOptions
+        });
+    });
+}
+
+async function runBenchmark(type) {
+    const section = document.getElementById('benchmarkSection');
+    const results = document.getElementById('benchmarkResults');
+    const stats = document.getElementById('benchmarkStats');
+
+    section.classList.add('active');
+    results.innerHTML = '<div class="loading-container"><div class="spinner"></div>Generating scaling data for n=[10, 20, 50, 100, 200]...</div>';
+    
+    initBenchmarkCharts();
+
+    // Determine algos to benchmark
+    let algorithms = [];
+    if (type === 'knapsack') algorithms = ['knapsack_dp', 'knapsack_brute_force', 'fractional_knapsack_greedy'];
+    else if (type === 'shortest_path') algorithms = ['dijkstra_greedy', 'bellman_ford_dp'];
+    else if (type === 'sorting') algorithms = ['merge_sort_dc'];
+    else if (type === 'mst') algorithms = ['kruskal_mst_greedy'];
+    else if (type === 'matrix_mult') algorithms = ['matrix_multiplication_dc'];
+    else if (type === 'searching') algorithms = ['binary_search_dc'];
+    else algorithms = ['knapsack_dp', 'fractional_knapsack_greedy'];
+
+    try {
+        const response = await callBenchmarkApi(type, algorithms);
+        const data = response.benchmark_data;
+
+        if (!data || data.length === 0) {
+            results.innerHTML = '<div class="warning-box">Insufficient data for benchmarking.</div>';
+            return;
+        }
+
+        results.innerHTML = '';
+        
+        // Group data by algorithm
+        const grouped = {};
+        data.forEach(item => {
+            if (!grouped[item.algorithm]) grouped[item.algorithm] = [];
+            grouped[item.algorithm].push(item);
+        });
+
+        const inputSizes = [10, 20, 50, 100, 200];
+        const colors = ['#00d4ff', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981'];
+
+        // Update Runtime Chart
+        benchmarkCharts.runtimeChart.data.labels = inputSizes;
+        benchmarkCharts.runtimeChart.data.datasets = Object.keys(grouped).map((algo, i) => ({
+            label: getAlgoClass(algo).name,
+            data: grouped[algo].map(d => d.runtime_ms),
+            borderColor: colors[i % colors.length],
+            backgroundColor: colors[i % colors.length] + '22',
+            tension: 0.3,
+            fill: true
+        }));
+        benchmarkCharts.runtimeChart.update();
+
+        // Update Growth Chart (Normalised to n=10)
+        benchmarkCharts.growthChart.data.labels = inputSizes;
+        benchmarkCharts.growthChart.data.datasets = Object.keys(grouped).map((algo, i) => {
+            const base = grouped[algo][0].runtime_ms;
+            return {
+                label: getAlgoClass(algo).name,
+                data: grouped[algo].map(d => base > 0 ? d.runtime_ms / base : 0),
+                borderColor: colors[i % colors.length],
+                borderDash: [5, 5],
+                tension: 0.3
+            };
+        });
+        benchmarkCharts.growthChart.update();
+
+        // Complexity Chart (Theoretical vs Actual)
+        // We pick the most complex one to show the "explosion"
+        const mainAlgo = Object.keys(grouped).find(a => a.includes('brute_force')) || Object.keys(grouped)[0];
+        const theoreticalType = grouped[mainAlgo][0].theoretical_complexity;
+        
+        const getTheoreticalValue = (n, comp) => {
+            if (comp.includes('2^n')) return Math.pow(2, n / 10); // scale for vis
+            if (comp.includes('n²')) return n * n / 100;
+            if (comp.includes('n log n')) return n * Math.log2(n) / 10;
+            if (comp.includes('n')) return n / 10;
+            return 0;
+        };
+
+        benchmarkCharts.complexityChart.data.labels = inputSizes;
+        benchmarkCharts.complexityChart.data.datasets = [
+            {
+                label: `Actual: ${getAlgoClass(mainAlgo).name}`,
+                data: grouped[mainAlgo].map(d => d.runtime_ms),
+                borderColor: '#00d4ff',
+                pointBackgroundColor: '#00d4ff',
+                showLine: true
+            },
+            {
+                label: `Theoretical: ${theoreticalType}`,
+                data: inputSizes.map(n => {
+                    const actualBase = grouped[mainAlgo][0].runtime_ms;
+                    const theoryBase = getTheoreticalValue(inputSizes[0], theoreticalType);
+                    const theoryVal = getTheoreticalValue(n, theoreticalType);
+                    return theoryBase > 0 ? (theoryVal / theoryBase) * actualBase : theoryVal;
+                }),
+                borderColor: 'rgba(255,255,255,0.3)',
+                borderDash: [2, 2],
+                fill: false,
+                pointRadius: 0
+            }
+        ];
+        benchmarkCharts.complexityChart.update();
+
+        // Comparison Chart (at max size n=200)
+        const maxSizeData = data.filter(d => d.input_size === 200);
+        benchmarkCharts.comparisonChart.data.labels = maxSizeData.map(d => getAlgoClass(d.algorithm).name);
+        benchmarkCharts.comparisonChart.data.datasets = [{
+            label: 'Runtime at n=200 (ms)',
+            data: maxSizeData.map(d => d.runtime_ms),
+            backgroundColor: colors.slice(0, maxSizeData.length)
+        }];
+        benchmarkCharts.comparisonChart.update();
+
+        // Update Stats
+        const runtimes = data.map(d => d.runtime_ms);
+        document.getElementById('algoCount').textContent = Object.keys(grouped).length;
+        document.getElementById('fastestResult').textContent = Math.min(...runtimes).toFixed(2) + 'ms';
+        
+        let pattern = "Polynomial";
+        if (theoreticalType.includes('2^n')) pattern = "Exponential ⚠";
+        else if (theoreticalType.includes('log')) pattern = "Logarithmic ✓";
+        else if (theoreticalType.includes('n log n')) pattern = "Log-Linear";
+        document.getElementById('growthPattern').textContent = pattern;
+
+    } catch (e) {
+        results.innerHTML = `<div class="warning-box">Benchmark Error: ${e.message}</div>`;
     }
 }
 
@@ -748,6 +1084,22 @@ document.getElementById('backToStandardBtn').addEventListener('click', () => {
     // Show experiment button, hide back button
     document.getElementById('experimentBtn').style.display = 'block';
     document.getElementById('backToStandardBtn').style.display = 'none';
+});
+
+document.getElementById('benchmarkBtn').addEventListener('click', () => {
+    const type = document.getElementById('problemType').value;
+    const modeBadge = document.getElementById('modeBadge');
+    modeBadge.textContent = '[BENCHMARK MODE]';
+    modeBadge.className = 'mode-badge benchmark';
+    
+    runBenchmark(type);
+});
+
+document.getElementById('closeBenchmarkBtn').addEventListener('click', () => {
+    document.getElementById('benchmarkSection').classList.remove('active');
+    const modeBadge = document.getElementById('modeBadge');
+    modeBadge.textContent = '[STANDARD MODE]';
+    modeBadge.className = 'mode-badge';
 });
 
 // CSS animation keyframe for dash animation
