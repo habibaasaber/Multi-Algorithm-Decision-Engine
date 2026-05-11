@@ -119,7 +119,10 @@ async function exportPdf() {
             })
         });
 
-        if (!response.ok) throw new Error("Failed to generate PDF");
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown server error" }));
+            throw new Error(errorData.detail || "Failed to generate PDF");
+        }
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);

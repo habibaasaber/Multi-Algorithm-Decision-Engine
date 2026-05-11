@@ -442,17 +442,32 @@ class ProfessionalPDFGenerator:
         
         elements.append(Paragraph("ALGORITHM COMPARISON (RANKED)", styles['heading']))
         
+        # Filter and sanitize data
+        sanitized_data = []
+        for r in experiment_data:
+            if not isinstance(r, dict): continue
+            sanitized_data.append({
+                'algorithm': str(r.get('algorithm', 'unknown')),
+                'average_runtime_ms': float(r.get('average_runtime_ms', 0) or 0),
+                '_calculatedValue': r.get('_calculatedValue', 'N/A'),
+                'approximation': float(r.get('approximation', 1.0) or 1.0)
+            })
+
+        if not sanitized_data:
+            elements.append(Paragraph("No comparison data available.", styles['normal']))
+            return elements
+
         # Header
         table_data = [['Rank', 'Algorithm', 'Runtime (ms)', 'Value', 'Ratio']]
         
-        for idx, r in enumerate(experiment_data):
+        for idx, r in enumerate(sanitized_data):
             algo_info = self.get_algorithm_info(r['algorithm'])
             table_data.append([
                 f"#{idx+1}",
                 algo_info['name'],
                 f"{r['average_runtime_ms']:.4f}",
                 str(r.get('_calculatedValue', 'N/A')),
-                f"{r.get('approximation', 1.0):.2f}"
+                f"{r['approximation']:.2f}"
             ])
             
         table = Table(table_data, colWidths=[0.6*inch, 2.2*inch, 1.2*inch, 1.2*inch, 0.8*inch])
@@ -488,38 +503,54 @@ class ProfessionalPDFGenerator:
         
         elements.append(Paragraph("RUNTIME COMPARISON CHART", styles['heading']))
         
+        # Filter and sanitize data
+        sanitized_data = []
+        for r in experiment_data:
+            if not isinstance(r, dict): continue
+            sanitized_data.append({
+                'algorithm': str(r.get('algorithm', 'unknown')),
+                'average_runtime_ms': float(r.get('average_runtime_ms', 0) or 0)
+            })
+
+        if not sanitized_data:
+            return []
+
         # Chart data
-        names = [self.get_algorithm_info(r['algorithm'])['name'] for r in experiment_data]
+        names = [self.get_algorithm_info(r['algorithm'])['name'] for r in sanitized_data]
         names.reverse() # Horizontal chart draws from bottom up
-        runtimes = [r['average_runtime_ms'] for r in experiment_data]
+        runtimes = [r['average_runtime_ms'] for r in sanitized_data]
         runtimes.reverse()
         
-        drawing = Drawing(400, 150)
-        bc = HorizontalBarChart()
-        bc.x = 80
-        bc.y = 20
-        bc.height = 110
-        bc.width = 300
-        bc.data = [runtimes]
-        bc.strokeColor = COLORS['gray']
-        bc.valueAxis.valueMin = 0
-        bc.valueAxis.labels.fontName = 'Helvetica'
-        bc.valueAxis.labels.fontSize = 8
-        bc.valueAxis.labels.fillColor = COLORS['text_muted']
-        bc.categoryAxis.labels.fontName = 'Helvetica'
-        bc.categoryAxis.labels.fontSize = 9
-        bc.categoryAxis.labels.fillColor = COLORS['text']
-        bc.categoryAxis.categoryNames = names
-        
-        # Custom colors for bars
-        bc.bars[0].fillColor = COLORS['cyan']
-        if len(runtimes) > 1:
-            bc.bars[(0, 0)].fillColor = COLORS['emerald'] # Highlight fastest
+        try:
+            drawing = Drawing(400, 150)
+            bc = HorizontalBarChart()
+            bc.x = 80
+            bc.y = 20
+            bc.height = 110
+            bc.width = 300
+            bc.data = [runtimes]
+            bc.strokeColor = COLORS['gray']
+            bc.valueAxis.valueMin = 0
+            bc.valueAxis.labels.fontName = 'Helvetica'
+            bc.valueAxis.labels.fontSize = 8
+            bc.valueAxis.labels.fillColor = COLORS['text_muted']
+            bc.categoryAxis.labels.fontName = 'Helvetica'
+            bc.categoryAxis.labels.fontSize = 9
+            bc.categoryAxis.labels.fillColor = COLORS['text']
+            bc.categoryAxis.categoryNames = names
             
-        drawing.add(bc)
-        elements.append(drawing)
+            # Custom colors for bars
+            bc.bars[0].fillColor = COLORS['cyan']
+            if len(runtimes) > 1:
+                bc.bars[(0, 0)].fillColor = COLORS['emerald'] # Highlight fastest
+                
+            drawing.add(bc)
+            elements.append(drawing)
+        except Exception as chart_err:
+            print(f"Chart generation failed: {chart_err}")
+            elements.append(Paragraph(f"<i>[Chart visualization unavailable for this instance]</i>", styles['metric_label']))
+
         elements.append(Spacer(1, 0.2*inch))
-        
         return elements
 
     def generate_pdf(self, 
