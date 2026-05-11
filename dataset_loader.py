@@ -36,19 +36,57 @@ def load_sequence_case(n: int):
         cases = json.load(f)
     return get_closest_case(cases, n)
 
+def load_searching_case(n: int):
+    path = os.path.join(DATA_DIR, "searching_cases.json")
+    with open(path, "r") as f:
+        cases = json.load(f)
+    return get_closest_case(cases, n)
+
+def load_exponentiation_case(n: int):
+    path = os.path.join(DATA_DIR, "exponentiation_cases.json")
+    with open(path, "r") as f:
+        cases = json.load(f)
+    return get_closest_case(cases, n)
+
+def load_scheduling_case(n: int):
+    path = os.path.join(DATA_DIR, "scheduling_cases.json")
+    with open(path, "r") as f:
+        cases = json.load(f)
+    return get_closest_case(cases, n)
+
+def load_matrix_case(n: int):
+    path = os.path.join(DATA_DIR, "matrix_cases.json")
+    with open(path, "r") as f:
+        cases = json.load(f)
+    return get_closest_case(cases, n)
+
+
 def get_problem_instance(problem_type: str, n: int):
     # Ensure datasets exist
     import generate_datasets
-    if not os.path.exists(os.path.join(DATA_DIR, "knapsack_cases.json")):
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(os.path.join(DATA_DIR, "knapsack_cases.json"), "w") as f:
-            json.dump(generate_datasets.generate_knapsack_cases(), f)
-        with open(os.path.join(DATA_DIR, "graph_cases.json"), "w") as f:
-            json.dump(generate_datasets.generate_graph_cases(), f)
-        with open(os.path.join(DATA_DIR, "sorting_cases.json"), "w") as f:
-            json.dump(generate_datasets.generate_sorting_cases(), f)
-        with open(os.path.join(DATA_DIR, "sequence_cases.json"), "w") as f:
-            json.dump(generate_datasets.generate_sequence_cases(), f)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    
+    # Check and generate missing dataset files
+    datasets = {
+        "knapsack_cases.json": generate_datasets.generate_knapsack_cases,
+        "graph_cases.json": generate_datasets.generate_graph_cases,
+        "sorting_cases.json": generate_datasets.generate_sorting_cases,
+        "sequence_cases.json": generate_datasets.generate_sequence_cases,
+        "searching_cases.json": generate_datasets.generate_searching_cases,
+        "exponentiation_cases.json": generate_datasets.generate_exponentiation_cases,
+        "scheduling_cases.json": generate_datasets.generate_scheduling_cases,
+        "matrix_cases.json": generate_datasets.generate_matrix_cases,
+    }
+    
+    for filename, generator_func in datasets.items():
+        filepath = os.path.join(DATA_DIR, filename)
+        if not os.path.exists(filepath):
+            try:
+                with open(filepath, "w") as f:
+                    json.dump(generator_func(), f)
+            except Exception as e:
+                print(f"Warning: Could not generate {filename}: {e}")
+
 
     if problem_type in ["knapsack", "fractional_knapsack", "subset"]:
         case = load_knapsack_case(n)
@@ -78,9 +116,28 @@ def get_problem_instance(problem_type: str, n: int):
             "gap_penalty": case["gap_penalty"],
             "mismatch_penalty": case["mismatch_penalty"]
         }
-    elif problem_type == "matrix_mult":
+    elif problem_type == "searching":
+        case = load_searching_case(n)
         return {
-            # Placeholder for matrix multiplication parameters if any algorithm exists
-            "n": n
+            "array": case["array"],
+            "target": case["target"]
         }
+    elif problem_type == "exponentiation":
+        case = load_exponentiation_case(n)
+        return {
+            "base": case["base"],
+            "exponent": case["exp"]
+        }
+    elif problem_type == "scheduling":
+        case = load_scheduling_case(n)
+        return {
+            "intervals": case["intervals"]
+        }
+    elif problem_type == "matrix_mult":
+        case = load_matrix_case(n)
+        return {
+            "mat_a": case["mat_a"],
+            "mat_b": case["mat_b"]
+        }
+
     return {}

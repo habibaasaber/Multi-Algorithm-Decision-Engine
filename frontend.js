@@ -24,7 +24,11 @@ async function callSolveApi(type, n, T, quality) {
         });
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.detail || "API Error");
+            let errorMsg = err.detail || "API Error";
+            if (typeof errorMsg === 'object') {
+                errorMsg = errorMsg.error || JSON.stringify(errorMsg);
+            }
+            throw new Error(errorMsg);
         }
         return await response.json();
     } catch (e) {
@@ -48,7 +52,11 @@ async function callCompareApi(type, n, algorithms) {
         });
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.detail || "API Error");
+            let errorMsg = err.detail || "API Error";
+            if (typeof errorMsg === 'object') {
+                errorMsg = errorMsg.error || JSON.stringify(errorMsg);
+            }
+            throw new Error(errorMsg);
         }
         return await response.json();
     } catch (e) {
@@ -65,18 +73,23 @@ function getAlgoClass(backendAlgoName) {
     return { name: backendAlgoName, css: 'dp' };
 }
 
-function getComplexityForType(type, kind) {
-    const complexities = {
-        knapsack: { dp_time: 'O(nW)', dp_space: 'O(nW)', greedy_time: 'O(n log n)', greedy_space: 'O(1)', brute_time: 'O(2^n)', brute_space: 'O(n)' },
-        mst: { greedy_time: 'O(E log E)', greedy_space: 'O(V+E)', dp_time: 'N/A', dp_space: 'N/A' },
-        sorting: { dc_time: 'O(n log n)', dc_space: 'O(n)', greedy_time: 'N/A', greedy_space: 'N/A' },
-        shortest_path: { dp_time: 'O(n²)', dp_space: 'O(n²)', greedy_time: 'O(n log n)', greedy_space: 'O(n)' },
-        sequence_alignment: { dp_time: 'O(nm)', dp_space: 'O(nm)', greedy_time: 'N/A', greedy_space: 'N/A' },
-        fractional_knapsack: { greedy_time: 'O(n log n)', greedy_space: 'O(1)', dp_time: 'N/A', dp_space: 'N/A' },
-        matrix_mult: { dc_time: 'O(n^log₂7)', dc_space: 'O(n²)', greedy_time: 'N/A', greedy_space: 'N/A' },
-        subset: { brute_time: 'O(2^n)', brute_space: 'O(n)' }
+function getComplexityMetrics(algorithmName) {
+    const registry = {
+        'knapsack_dp': { time: "O(n × W)", space: "O(n × W)", quality: "100% Optimal" },
+        'sequence_alignment_dp': { time: "O(n × m)", space: "O(n × m)", quality: "100% Optimal" },
+        'bellman_ford_dp': { time: "O(V × E)", space: "O(V)", quality: "100% Optimal" },
+        'weighted_interval_scheduling_dp': { time: "O(n log n)", space: "O(n)", quality: "100% Optimal" },
+        'fractional_knapsack_greedy': { time: "O(n log n)", space: "O(n)", quality: "100% Optimal" },
+        'kruskal_mst_greedy': { time: "O(E log E)", space: "O(V + E)", quality: "100% Optimal" },
+        'dijkstra_greedy': { time: "O(V²)", space: "O(V)", quality: "100% Optimal" },
+        'merge_sort_dc': { time: "O(n log n)", space: "O(n)", quality: "100% Optimal" },
+        'binary_search_dc': { time: "O(log n)", space: "O(1)", quality: "100% Optimal" },
+        'fast_exponentiation_dc': { time: "O(log n)", space: "O(log n)", quality: "100% Optimal" },
+        'knapsack_brute_force': { time: "O(2^n)", space: "O(2^n)", quality: "100% Optimal" },
+        'subset_bruteforce': { time: "O(2^n)", space: "O(2^n)", quality: "100% Optimal" },
+        'matrix_multiplication_dc': { time: "O(n^log₂7)", space: "O(n²)", quality: "100% Optimal" }
     };
-    return complexities[type]?.[kind] || 'O(?)';
+    return registry[algorithmName] || { time: "O(?)", space: "O(?)", quality: "Unknown" };
 }
 
 // ========== UI GENERATION ==========
@@ -91,11 +104,12 @@ function renderRecommendation(decision, type, n, T, quality) {
     
     const backendAlgoName = decision.algorithm_name;
     const algoInfo = getAlgoClass(backendAlgoName);
+    const metrics = getComplexityMetrics(backendAlgoName);
 
-    let timeComplexity = decision.time_complexity || 'O(?)';
-    let spaceComplexity = decision.space_complexity || 'O(?)';
-    let qualityGuarantee = decision.quality_guarantee || 'Unknown';
-    let justification = decision.reason || "Algorithm chosen by Decision Engine.";
+    let timeComplexity = metrics.time;
+    let spaceComplexity = metrics.space;
+    let qualityGuarantee = metrics.quality;
+    let justification = decision.justification || "Algorithm chosen by Decision Engine.";
 
     const warningBox = backendAlgoName.includes('brute_force') ? 
         `<div class="warning-box">⚠ WARNING: Brute Force is infeasible for n > 15. Use only for correctness verification.</div>` :
@@ -138,8 +152,24 @@ function renderSolutionData(resultObj, type) {
         if (type === 'knapsack' || type === 'fractional_knapsack') {
             solutionHTML += `<div class="result-row">
                 <span class="result-row-label">Optimal Value</span>
-                <span class="result-row-value">${solution.max_value !== undefined ? solution.max_value : solution.total_value}</span>
+                <span class="result-row-value">${solution.max_value !== undefined ? solution.max_value : (solution.total_value !== undefined ? solution.total_value : 'N/A')}</span>
             </div>`;
+            
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+
+            if (type === 'fractional_knapsack' && solution.fractions) {
+                solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">Fractional Selection</span></div>';
+                solutionHTML += '<div class="dp-table-container"><table class="dp-table"><thead><tr><td class="header">Item Index</td><td class="header">Fraction Taken</td></tr></thead><tbody>';
+                solution.fractions.forEach((f, idx) => {
+                    if (f > 0) {
+                        solutionHTML += `<tr><td>${idx}</td><td class="${f === 1.0 ? 'optimal' : 'path'}">${(f * 100).toFixed(1)}%</td></tr>`;
+                    }
+                });
+                solutionHTML += '</tbody></table></div>';
+            }
             
             if (solution.selected_items) {
                 solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">Selected Items</span></div>';
@@ -159,6 +189,11 @@ function renderSolutionData(resultObj, type) {
                 <span class="result-row-value">${solution.total_weight}</span>
             </div>`;
             
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+            
             if (solution.mst_edges) {
                 solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">MST Edges</span></div>';
                 solutionHTML += '<div class="items-list">';
@@ -173,8 +208,8 @@ function renderSolutionData(resultObj, type) {
         }
         else if (type === 'sorting') {
             solutionHTML += `<div class="result-row" style="margin-top: 12px;">
-                <span class="result-row-label">Time taken</span>
-                <span class="result-row-value">${solution.runtime_ms || '?'} ms</span>
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
             </div>`;
             
             if (solution.sorted_array) {
@@ -203,12 +238,47 @@ function renderSolutionData(resultObj, type) {
                 <span class="result-row-label">Sequence 2</span>
                 <span class="result-row-value" style="font-family: 'JetBrains Mono', monospace;">${solution.aligned_b || ''}</span>
             </div>`;
+            
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+        }
+        else if (type === 'matrix_mult') {
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Dimension</span>
+                <span class="result-row-value">${solution.n} x ${solution.n}</span>
+            </div>`;
+            
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
+            </div>`;
+            if (solution.result_matrix) {
+                solutionHTML += '<div style="margin-top: 12px;"><span class="result-row-label">Product Matrix Snippet (3x3)</span></div>';
+                solutionHTML += '<div class="dp-table-container"><table class="dp-table">';
+                solution.result_matrix.slice(0, 3).forEach(row => {
+                    solutionHTML += '<tr>';
+                    row.slice(0, 3).forEach(val => {
+                        solutionHTML += `<td>${val}</td>`;
+                    });
+                    if (row.length > 3) solutionHTML += '<td>...</td>';
+                    solutionHTML += '</tr>';
+                });
+                if (solution.result_matrix.length > 3) solutionHTML += '<tr><td>...</td><td>...</td><td>...</td><td>...</td></tr>';
+                solutionHTML += '</table></div>';
+            }
         }
         else {
             // Generic output
             solutionHTML += `<div class="result-row">
                 <span class="result-row-label">Raw Output</span>
                 <span class="result-row-value" style="font-size:10px;">${JSON.stringify(solution).substring(0, 100)}...</span>
+            </div>`;
+            
+            solutionHTML += `<div class="result-row">
+                <span class="result-row-label">Runtime</span>
+                <span class="result-row-value">${(solution.runtime_ms || resultObj.runtime_ms || 0).toFixed(4)} ms</span>
             </div>`;
         }
 
@@ -449,18 +519,34 @@ async function runExperiment(type, n, T, quality) {
     experimentResults.innerHTML = '<div class="loading-container"><div class="spinner"></div>Running all algorithms...</div>';
     experimentSection.classList.add('active');
 
-    // List applicable algos based on type
+    // List applicable algos based on type (only algorithms that exist in backend)
     let algorithmsToRun = [];
     if (type === 'knapsack') algorithmsToRun = ['knapsack_dp', 'knapsack_brute_force', 'fractional_knapsack_greedy'];
+    else if (type === 'fractional_knapsack') algorithmsToRun = ['fractional_knapsack_greedy', 'knapsack_dp'];
+    else if (type === 'subset') algorithmsToRun = ['subset_bruteforce'];
     else if (type === 'mst') algorithmsToRun = ['kruskal_mst_greedy'];
     else if (type === 'sorting') algorithmsToRun = ['merge_sort_dc'];
     else if (type === 'sequence_alignment') algorithmsToRun = ['sequence_alignment_dp'];
-    else if (type === 'fractional_knapsack') algorithmsToRun = ['fractional_knapsack_greedy', 'knapsack_dp'];
+    else if (type === 'shortest_path') algorithmsToRun = ['dijkstra_greedy', 'bellman_ford_dp'];
+    else if (type === 'scheduling') algorithmsToRun = ['weighted_interval_scheduling_dp'];
+    else if (type === 'searching') algorithmsToRun = ['binary_search_dc'];
+    else if (type === 'exponentiation') algorithmsToRun = ['fast_exponentiation_dc'];
+    else if (type === 'matrix_mult') algorithmsToRun = ['matrix_multiplication_dc'];
     else algorithmsToRun = ['knapsack_dp']; // Fallback
+
+    if (algorithmsToRun.length === 0) {
+        experimentResults.innerHTML = `<div class="warning-box">No algorithms available for problem type: ${type}</div>`;
+        return;
+    }
 
     try {
         const compareResult = await callCompareApi(type, n, algorithmsToRun);
         const results = compareResult.comparison_results;
+
+        if (!results || results.length === 0) {
+            experimentResults.innerHTML = `<div class="warning-box">No results returned from comparison API</div>`;
+            return;
+        }
 
         // compute approximation ratios assuming best runtime or best value?
         // Wait, for comparison we need to rank by solution quality.
@@ -549,6 +635,23 @@ async function runExperiment(type, n, T, quality) {
         </div>`;
 
         experimentResults.innerHTML = tableHTML + chartHTML + summary;
+        
+        // Add Close Button
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'button button-info';
+        closeBtn.style.marginTop = '20px';
+        closeBtn.innerHTML = '<span>×</span> EXIT EXPERIMENT MODE';
+        closeBtn.onclick = () => {
+            experimentSection.classList.remove('active');
+            const modeBadge = document.getElementById('modeBadge');
+            modeBadge.textContent = '[STANDARD MODE]';
+            modeBadge.className = 'mode-badge';
+            
+            // Show experiment button, hide back button
+            document.getElementById('experimentBtn').style.display = 'block';
+            document.getElementById('backToStandardBtn').style.display = 'none';
+        };
+        experimentResults.appendChild(closeBtn);
 
     } catch (e) {
         experimentResults.innerHTML = `<div class="warning-box">Error running experiment: ${e.message}</div>`;
@@ -628,7 +731,23 @@ document.getElementById('experimentBtn').addEventListener('click', () => {
     modeBadge.textContent = '[EXPERIMENT MODE]';
     modeBadge.className = 'mode-badge experiment';
 
+    // Show back button, hide experiment button
+    document.getElementById('experimentBtn').style.display = 'none';
+    document.getElementById('backToStandardBtn').style.display = 'block';
+
     runExperiment(type, n, T, quality);
+});
+
+document.getElementById('backToStandardBtn').addEventListener('click', () => {
+    const experimentSection = document.getElementById('experimentSection');
+    experimentSection.classList.remove('active');
+    const modeBadge = document.getElementById('modeBadge');
+    modeBadge.textContent = '[STANDARD MODE]';
+    modeBadge.className = 'mode-badge';
+    
+    // Show experiment button, hide back button
+    document.getElementById('experimentBtn').style.display = 'block';
+    document.getElementById('backToStandardBtn').style.display = 'none';
 });
 
 // CSS animation keyframe for dash animation

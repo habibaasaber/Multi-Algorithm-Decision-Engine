@@ -1,4 +1,3 @@
-
 import os
 import time
 import traceback
@@ -6,7 +5,7 @@ import threading
 import statistics
 import importlib.util
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +33,11 @@ decision_module = load_module("decision_module", "Decision_Engine.py")
 
 choose_algorithm = decision_module.choose_algorithm
 
+print(f"DEBUG: Loaded AlgoImpl from {os.path.join(BASE_DIR, 'AlgoImpl.py')}")
+print(f"DEBUG: Loaded Decision_Engine from {os.path.join(BASE_DIR, 'Decision_Engine.py')}")
+print(f"DEBUG: Valid problem types in engine: {getattr(decision_module, 'VALID_PROBLEM_TYPES', 'NOT FOUND')}")
+
+
 
 # Algorithm Execution map
 ALGORITHM_FUNCTIONS = {
@@ -48,14 +52,16 @@ ALGORITHM_FUNCTIONS = {
     "binary_search_dc": algo_module.binary_search_dc,
     "fast_exponentiation_dc": algo_module.fast_exponentiation_dc,
     "knapsack_brute_force": algo_module.knapsack_brute_force,
+    "subset_bruteforce": algo_module.knapsack_brute_force,  # subset uses knapsack brute force
+    "matrix_multiplication_dc": algo_module.matrix_multiplication_dc,
 }
 
 
 #FastAPI Application
 app = FastAPI(
     title="Multi-Algorithm Decision Engine API",
-    description="Advanced Backend System for Project 19",
-    version="1.0.0"
+    description="Advanced Backend System for Project 19 [VERSION 2.0.1 - FIXED]",
+    version="2.0.1"
 )
 
 # Enable CORS for frontend integration
@@ -69,7 +75,11 @@ app.add_middleware(
 
 # Request Models
 class SolveRequest(BaseModel):
-    problem_type: str
+    problem_type: Literal[
+        'exponentiation', 'fractional_knapsack', 'knapsack', 'mst', 
+        'scheduling', 'searching', 'sequence_alignment', 'shortest_path', 
+        'sorting', 'subset', 'matrix_mult'
+    ]
     n: int = Field(..., gt=0)
     time_budget_ms: float = Field(..., gt=0)
     quality_requirement: str
@@ -78,7 +88,11 @@ class SolveRequest(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    problem_type: str
+    problem_type: Literal[
+        'exponentiation', 'fractional_knapsack', 'knapsack', 'mst', 
+        'scheduling', 'searching', 'sequence_alignment', 'shortest_path', 
+        'sorting', 'subset', 'matrix_mult'
+    ]
     n: int = Field(..., gt=0)
     runs: int = Field(default=3, ge=1, le=20)
 
@@ -122,6 +136,7 @@ def build_algorithm_kwargs(algorithm_name: str, parameters: dict):
     mapping = {
         "knapsack_dp": ["values", "weights", "capacity"],
         "knapsack_brute_force": ["values", "weights", "capacity"],
+        "subset_bruteforce": ["values", "weights", "capacity"],
         "fractional_knapsack_greedy": ["values", "weights", "capacity"],
 
         "sequence_alignment_dp": [
@@ -153,6 +168,9 @@ def build_algorithm_kwargs(algorithm_name: str, parameters: dict):
 
         "fast_exponentiation_dc": [
             "base", "exponent", "modulus"
+        ],
+        "matrix_multiplication_dc": [
+            "mat_a", "mat_b"
         ],
     }
 
@@ -228,19 +246,39 @@ def solve_problem(request: SolveRequest):
             request.parameters
         )
 
-        # STEP 3 → Execute algorithm safely
+        # STEP 3 → Execute algorithm safely (with averaging for stability)
+        # We run it once first to get the solution and check performance
+        start_time = time.perf_counter()
         solution = run_with_timeout(
             ALGORITHM_FUNCTIONS[algorithm_name],
             timeout_seconds=max(2, request.time_budget_ms / 1000),
             **algo_kwargs
         )
+        first_run_ms = (time.perf_counter() - start_time) * 1000
+
+        # If it's fast (< 50ms), run it 99 more times to get a stable average
+        if first_run_ms < 50:
+            total_time_ms = first_run_ms
+            num_runs = 100
+            for _ in range(num_runs - 1):
+                s = time.perf_counter()
+                run_with_timeout(
+                    ALGORITHM_FUNCTIONS[algorithm_name],
+                    timeout_seconds=1.0,
+                    **algo_kwargs
+                )
+                total_time_ms += (time.perf_counter() - s) * 1000
+            avg_runtime_ms = total_time_ms / num_runs
+        else:
+            avg_runtime_ms = first_run_ms
 
         solution["algorithm_used"] = algorithm_name
 
         return {
             "status": "success",
             "decision": decision,
-            "solution": solution
+            "solution": solution,
+            "runtime_ms": round(avg_runtime_ms, 4)
         }
 
     except HTTPException:
@@ -255,10 +293,7 @@ def solve_problem(request: SolveRequest):
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": str(error),
-                "traceback": traceback.format_exc()
-            }
+            detail=f"Algorithm execution failed: {str(error)}. Traceback: {traceback.format_exc()}"
         )
 
 
@@ -336,8 +371,9 @@ if __name__ == "__main__":
     import uvicorn
 
     print("=" * 60)
-    print(" MULTI-ALGORITHM DECISION ENGINE SERVER ")
-    print("=" * 60)
+    print("PROJECT 19 - MULTI-ALGORITHM DECISION ENGINE")
+    print("Member 2 - Decision Engine Implementation [VERSION 2.0.1 - FIXED]")
+    print("=============================================================")
     print("Server running on: http://localhost:5000")
     print("Swagger docs:      http://localhost:5000/docs")
     print("=" * 60)

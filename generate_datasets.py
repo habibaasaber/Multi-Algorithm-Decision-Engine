@@ -122,6 +122,69 @@ def generate_sequence_cases():
         cases.append(case)
     return cases
 
+def generate_searching_cases():
+    cases = []
+    for i in range(1, 51):
+        n = random.randint(10, 1000)
+        arr = sorted([random.randint(1, 5000) for _ in range(n)])
+        target = random.choice(arr) if random.random() > 0.2 else random.randint(1, 5000)
+        case = {
+            "id": i,
+            "n": n,
+            "array": arr,
+            "target": target
+        }
+        cases.append(case)
+    return cases
+
+def generate_exponentiation_cases():
+    cases = []
+    for i in range(1, 51):
+        base = random.randint(2, 10)
+        exp = random.randint(10, 100)
+        case = {
+            "id": i,
+            "n": exp, # using exp as n
+            "base": base,
+            "exp": exp
+        }
+        cases.append(case)
+    return cases
+
+def generate_scheduling_cases():
+    cases = []
+    for i in range(1, 51):
+        n = random.randint(5, 30)
+        intervals = []
+        for _ in range(n):
+            start = random.randint(1, 50)
+            end = start + random.randint(1, 20)
+            weight = random.randint(10, 100)
+            intervals.append((start, end, weight))
+        case = {
+            "id": i,
+            "n": n,
+            "intervals": intervals
+        }
+        cases.append(case)
+    return cases
+
+def generate_matrix_cases():
+    cases = []
+    for i in range(1, 11): # smaller number as matrices are large
+        n = 2**random.randint(2, 6) # powers of 2 for Strassen
+        mat_a = [[random.randint(1, 10) for _ in range(n)] for _ in range(n)]
+        mat_b = [[random.randint(1, 10) for _ in range(n)] for _ in range(n)]
+        case = {
+            "id": i,
+            "n": n,
+            "mat_a": mat_a,
+            "mat_b": mat_b
+        }
+        cases.append(case)
+    return cases
+
+
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     
@@ -136,5 +199,18 @@ if __name__ == "__main__":
         
     with open("data/sequence_cases.json", "w") as f:
         json.dump(generate_sequence_cases(), f, indent=2)
+
+    with open("data/searching_cases.json", "w") as f:
+        json.dump(generate_searching_cases(), f, indent=2)
+
+    with open("data/exponentiation_cases.json", "w") as f:
+        json.dump(generate_exponentiation_cases(), f, indent=2)
+
+    with open("data/scheduling_cases.json", "w") as f:
+        json.dump(generate_scheduling_cases(), f, indent=2)
+
+    with open("data/matrix_cases.json", "w") as f:
+        json.dump(generate_matrix_cases(), f, indent=2)
+
         
     print("Datasets generated successfully.")

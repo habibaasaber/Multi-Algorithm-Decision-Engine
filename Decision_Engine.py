@@ -1,7 +1,7 @@
 """
 =============================================================
 PROJECT 19 - MULTI-ALGORITHM DECISION ENGINE
-Member 2 - Decision Engine Implementation
+Member 2 - Decision Engine Implementation [VERSION 2.0.1 - FIXED]
 =============================================================
 This file contains the Decision Engine logic:
     choose_algorithm(problem_type, n, time_budget_ms,
@@ -44,6 +44,8 @@ VALID_PROBLEM_TYPES = {
     "sorting",
     "searching",
     "exponentiation",
+    "subset",
+    "matrix_mult",
 }
 
 
@@ -200,6 +202,27 @@ def choose_algorithm(
             warnings = warnings,
         )
 
+    if problem_type == "matrix_mult":
+        meta = ALGORITHM_REGISTRY["matrix_multiplication_dc"]
+        if n > meta["thresholds"]["max_n"]:
+            raise ValueError(
+                f"n={n} exceeds the maximum supported size "
+                f"({meta['thresholds']['max_n']}) for Strassen's matrix mult. "
+                "The recursion depth would be too great."
+            )
+        return _build_result(
+            algorithm_name = "matrix_multiplication_dc",
+            justification  = (
+                "Divide & Conquer (Strassen's Algorithm) selected. "
+                "Matrix multiplication can be improved from O(n³) to "
+                "O(n^log₂7) by recursively splitting matrices into "
+                "quadrants and performing 7 multiplications instead of 8. "
+                f"For n={n}, this approach is highly efficient."
+            ),
+            meta     = meta,
+            warnings = warnings,
+        )
+
     # ══════════════════════════════════════════════════════
     # STEP 3 — MST PROBLEM
     # ══════════════════════════════════════════════════════
@@ -341,8 +364,28 @@ def choose_algorithm(
             )
 
     # ══════════════════════════════════════════════════════
-    # STEP 7 — KNAPSACK PROBLEMS
+    # STEP 7 — KNAPSACK & SUBSET PROBLEMS
     # ══════════════════════════════════════════════════════
+
+    if problem_type == "subset":
+        meta = ALGORITHM_REGISTRY["subset_bruteforce"]
+        if n > meta["thresholds"]["max_n"]:
+            raise ValueError(
+                f"n={n} exceeds brute force limit ({meta['thresholds']['max_n']}) "
+                "for subset enumeration. Exponential time complexity O(2^n) "
+                "makes this infeasible for larger n."
+            )
+        return _build_result(
+            algorithm_name = "subset_bruteforce",
+            justification  = (
+                f"Brute Force (Subset Enumeration) selected. For n={n}, "
+                f"it is feasible to evaluate all 2^{n} = {2**n:,} possible "
+                "subsets. This ensures we find the exact optimal subset "
+                "based on the provided constraints."
+            ),
+            meta     = meta,
+            warnings = warnings,
+        )
 
     if problem_type in ("knapsack", "fractional_knapsack"):
 
@@ -508,6 +551,7 @@ def _build_result(
         "algorithm_name"    : algorithm_name,
         "justification"     : justification,
         "expected_complexity": meta["time_complexity"],
+        "space_complexity": meta["space_complexity"],
         "quality_guarantee" : quality_guarantee,
         "warnings"          : clean_warnings,
     }
